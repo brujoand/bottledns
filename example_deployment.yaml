@@ -16,7 +16,7 @@ spec:
       serviceAccountName: bottledns
       containers:
       - name: bottledns
-        image: brujoand/bottledns:main
+        image: ghcr.io/brujoand/bottledns:main
         ports:
         - containerPort: 5353
           protocol: UDP
