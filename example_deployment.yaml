@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bottledns
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bottledns
+  template:
+    metadata:
+      labels:
+        app: bottledns
+    spec:
+      serviceAccountName: bottledns
+      containers:
+      - name: bottledns
+        image: brujoand/bottledns:beta
+        ports:
+        - containerPort: 5353
+          protocol: UDP
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bottledns
+  namespace: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bottledns
+  namespace: default
+spec:
+  selector:
+    app: bottledns
+  ports:
+    - protocol: UDP
+      port: 53
+      targetPort: 5353
+  type: LoadBalancer
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: list-ingresses
+rules:
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - list
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: list-ingresses-binding
+subjects:
+- kind: ServiceAccount
+  name: bottledns
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: list-ingresses
+  apiGroup: rbac.authorization.k8s.io
