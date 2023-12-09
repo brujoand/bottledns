@@ -20,7 +20,7 @@ function get_all_ingress {
 function generate_config {
   jq -r \
     '.items[] | "\(.status.loadBalancer.ingress | map(.ip)[]) \(.spec.rules | map(.host)[])"' \
-  <<< "$(get_all_ingress)"
+  <<< "$(get_all_ingress)" | sort
 }
 
 printf '%s\n' 'Starting dnsmasq'
@@ -29,9 +29,8 @@ dnsmasq -C "$DNSMASQ_CONF"
 while true; do
   current_hash=$(md5sum "$BOTTLEDNS_HOSTS")
   generate_config > "$BOTTLEDNS_HOSTS"
-  new_hash=$(md5sum "$BOTTLEDNS_HOSTS")
 
-  if [[ "$current_hash" != "$new_hash" ]]; then
+  if ! md5sum -c <<< "$current_hash" &>/dev/null; then
     printf '%s\n' 'Reloading custom hosts due to change'
     pkill -SIGHUP dnsmasq
   fi
