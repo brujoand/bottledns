@@ -19,7 +19,8 @@ function get_all_ingress {
 
 function generate_config {
   jq -r \
-    '.items[] | "\(.status.loadBalancer.ingress | map(.ip)[]) \(.spec.rules | map(.host)[])"' \
+    '.items[] |
+    "\(.status.loadBalancer.ingress // [] | map(.ip)[]) \(.spec.rules // [] | map(.host)[])"' \
   <<< "$(get_all_ingress)" | sort
 }
 
