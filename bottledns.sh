@@ -29,8 +29,7 @@ function get_gateway_ip {
     echo "Missing gateway_name or namespace"
     return 1
   fi
-
-  jq -r '.status.addresses[]?.value // empty' <<< "$gateway_data"
+  curl_k8s "apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/gateways/${gateway_name}" | jq -r '.status.addresses[]?.value // empty'
 }
 
 function get_gateway_hostnames {
