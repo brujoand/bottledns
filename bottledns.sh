@@ -80,8 +80,12 @@ while true; do
   get_records | sort > "$BOTTLEDNS_HOSTS"
 
   if ! md5sum -c <<< "$current_hash" &>/dev/null; then
-    printf '%s\n' 'Reloading custom hosts due to change'
-    pkill -SIGHUP dnsmasq
+    printf '%s\n' 'Restarting dnsmasq due to change in bottledns hosts'
+    pkill dnsmasq
+    # Wait a bit to avoid race condition
+    sleep 0.5
+    # Restart dnsmasq in the background
+    dnsmasq --C "$DNSMASQ_CONF"
   fi
 
   # Needed so that we can be interupted by SIGHUP
