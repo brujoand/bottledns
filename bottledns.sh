@@ -85,7 +85,7 @@ while true; do
     # Wait a bit to avoid race condition
     sleep 0.5
     # Restart dnsmasq in the background
-    dnsmasq --C "$DNSMASQ_CONF"
+    dnsmasq -C "$DNSMASQ_CONF"
   fi
 
   # Needed so that we can be interupted by SIGHUP
