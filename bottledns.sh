@@ -74,7 +74,7 @@ function get_records {
 
 function write_hosts_file {
   local temp_hosts=$(mktemp)
-  
+
   if [[ -n "${BOTTLEDNS_OVERRIDE_HOSTS}" ]]; then
     if [[ -f "${BOTTLEDNS_OVERRIDE_HOSTS}" ]]; then
       cat "${BOTTLEDNS_OVERRIDE_HOSTS}" > "$temp_hosts"
@@ -82,9 +82,9 @@ function write_hosts_file {
       printf '%s\n' "Warning: Override hosts file ${BOTTLEDNS_OVERRIDE_HOSTS} not found, continuing without it"
     fi
   fi
-  
+
   get_records | sort >> "$temp_hosts"
-  mv "$temp_hosts" "$BOTTLEDNS_HOSTS"
+  cat "$temp_hosts" > "$BOTTLEDNS_HOSTS"
 }
 
 printf '%s\n' 'Starting dnsmasq'
