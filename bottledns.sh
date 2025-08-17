@@ -72,12 +72,27 @@ function get_records {
   get_ingress_records
 }
 
+function write_hosts_file {
+  local temp_hosts=$(mktemp)
+  
+  if [[ -n "${BOTTLEDNS_OVERRIDE_HOSTS}" ]]; then
+    if [[ -f "${BOTTLEDNS_OVERRIDE_HOSTS}" ]]; then
+      cat "${BOTTLEDNS_OVERRIDE_HOSTS}" > "$temp_hosts"
+    else
+      printf '%s\n' "Warning: Override hosts file ${BOTTLEDNS_OVERRIDE_HOSTS} not found, continuing without it"
+    fi
+  fi
+  
+  get_records | sort >> "$temp_hosts"
+  mv "$temp_hosts" "$BOTTLEDNS_HOSTS"
+}
+
 printf '%s\n' 'Starting dnsmasq'
 dnsmasq -C "$DNSMASQ_CONF"
 
 while true; do
   current_hash=$(md5sum "$BOTTLEDNS_HOSTS")
-  get_records | sort > "$BOTTLEDNS_HOSTS"
+  write_hosts_file
 
   if ! md5sum -c <<< "$current_hash" &>/dev/null; then
     printf '%s\n' 'Restarting dnsmasq due to change in bottledns hosts'

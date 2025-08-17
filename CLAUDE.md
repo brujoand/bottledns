@@ -25,8 +25,9 @@ The project consists of:
 
 ### DNS Configuration
 - dnsmasq runs on port 5353 (mapped to 53 in service)
-- Uses Cloudflare DNS (1.1.1.1) as upstream resolver
+- Uses system's default DNS resolution (no upstream resolver configured)
 - Custom hosts loaded from `/etc/bottledns.hosts`
+- Configuration disables system hosts file and polling
 
 ## Development Commands
 
@@ -46,12 +47,35 @@ docker build -t bottledns .
 kubectl apply -f example_deployment.yaml
 ```
 
+### Test DNS Resolution
+```bash
+# Test against running container
+dig @<bottledns-service-ip> -p 53 <hostname>
+
+# Test locally with dnsmasq
+dnsmasq -C etc/dnsmasq.conf --no-daemon
+```
+
 ## Configuration
 - `BOTTLEDNS_NAP_TIME` - Sleep interval between checks (default: 120 seconds)
 - Script requires service account with `list` permissions on `ingresses` and `gateways`
 - Supports both networking.k8s.io/v1 Ingress and gateway.networking.k8s.io/v1 Gateway resources
 
+### Required RBAC for Gateway API
+```yaml
+# Add to ClusterRole for Gateway API support
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - gateways
+  - httproutes
+  verbs:
+  - list
+```
+
 ## Debugging
 - Script logs to stdout when reloading DNS due to changes
 - Check `/etc/bottledns.hosts` for current DNS records
 - dnsmasq logs available via container logs
+- Script can be interrupted with SIGHUP for graceful shutdown
+- Uses MD5 hash comparison to avoid unnecessary dnsmasq restarts
