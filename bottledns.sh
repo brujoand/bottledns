@@ -13,6 +13,17 @@ function curl_k8s {
   curl -s --header "Authorization: Bearer ${KUBE_TOKEN}" --insecure "${KUBE_ENDPOINT}/${path}"
 }
 
+function verify_rbac_permissions {
+  local ingress_response
+  ingress_response=$(curl_k8s "apis/networking.k8s.io/v1/ingresses")
+
+  if echo "$ingress_response" | jq -e '.status == "Failure"' &>/dev/null; then
+    echo "ERROR: $(echo "$ingress_response" | jq -r '.message')"
+    echo "See example_deployment.yaml for RBAC configuration."
+    exit 1
+  fi
+}
+
 function get_all_ingress {
   curl_k8s "apis/networking.k8s.io/v1/ingresses"
 }
@@ -86,6 +97,8 @@ function write_hosts_file {
   get_records | sort >> "$temp_hosts"
   cat "$temp_hosts" > "$BOTTLEDNS_HOSTS"
 }
+
+verify_rbac_permissions
 
 printf '%s\n' 'Starting dnsmasq'
 dnsmasq -C "$DNSMASQ_CONF"
