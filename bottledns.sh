@@ -4,9 +4,9 @@ set -e
 
 KUBE_ENDPOINT="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
 KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-BOTTLEDNS_HOSTS='/etc/bottledns.hosts'
-DNSMASQ_CONF='/etc/dnsmasq.conf'
-BOTTLEDNS_NAP_TIME=120
+BOTTLEDNS_HOSTS=${BOTTLEDNS_HOSTS:-"${HOME}/bottledns.hosts"}
+DNSMASQ_CONF=${DNSMASQ_CONF:-"${HOME}/dnsmasq.conf"}
+BOTTLEDNS_NAP_TIME=${BOTTLEDNS_NAP_TIME:-120}
 
 function curl_k8s {
   local path=$1
