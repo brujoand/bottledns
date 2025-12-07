@@ -55,9 +55,17 @@ function get_gateway_hostnames {
 }
 
 function get_route_records {
-  mapfile -t gateway_lines <<< "$(get_all_gateways)"
+  local gateway_output
+  gateway_output="$(get_all_gateways)"
+
+  # Return early if no gateways found
+  [[ -z "$gateway_output" ]] && return 0
+
+  mapfile -t gateway_lines <<< "$gateway_output"
 
   for gateway_line in "${gateway_lines[@]}"; do
+    [[ -z "$gateway_line" ]] && continue
+
     mapfile -t -d ':' gateway_data <<< "${gateway_line}"
     local namespace="${gateway_data[0]%$'\n'}"
     local name="${gateway_data[1]%$'\n'}"
