@@ -30,7 +30,7 @@ function get_all_ingress {
 
 function get_all_gateways {
   curl_k8s "apis/gateway.networking.k8s.io/v1/gateways" | \
-  jq -r '.items[] | "\(.metadata.namespace):\(.metadata.name)"'
+  jq -r '.items // [] | .[] | "\(.metadata.namespace):\(.metadata.name)"'
 }
 
 function get_gateway_ip {
@@ -47,7 +47,8 @@ function get_gateway_hostnames {
   local gateway=$1
   curl_k8s "apis/gateway.networking.k8s.io/v1/httproutes" \
   | jq -r --arg gw "$gateway" '
-    .items[]
+    .items // []
+    | .[]
     | select(.spec.parentRefs[]?.name == $gw)
     | .spec.hostnames[]?
   '
