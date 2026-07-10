@@ -1,81 +1,52 @@
-# CLAUDE.md
+# bottledns
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Polls Kubernetes Ingresses and Gateway API routes, writes a dnsmasq hosts file.
+A single bash script in an Alpine container.
 
-## Project Overview
-Bottledns is a lightweight Kubernetes DNS solution that automatically manages DNS records for ingresses and gateway API routes. It runs as a single bash script in a container that continuously monitors Kubernetes resources and updates dnsmasq configuration.
+## Hard rules
+
+- **Never push to `main`/`master`.** Feature branch + PR, always. Open the PR,
+  report the URL, stop — **only the human merges.**
+- **Conventional Commits** (`feat:`, `fix:`, `chore:`, …). Never hand-bump a version.
+- Plan every non-trivial task. If the plan fails, restart planning.
+
+## Workflow
+
+Default branch is `main`. There is no pre-commit config and no mise here; the only
+CI is `docker-publish.yml`. The workspace bash standards still apply.
 
 ## Architecture
-The project consists of:
-- `bottledns.sh` - Main bash script that polls Kubernetes API and manages DNS records
-- `etc/dnsmasq.conf` - dnsmasq configuration running on port 5353
-- `etc/bottledns.hosts` - Dynamic hosts file updated by the script
-- `Dockerfile` - Alpine-based container with bash, curl, jq, and dnsmasq
-- `example_deployment.yaml` - Complete Kubernetes deployment with RBAC
 
-## Key Components
+- `bottledns.sh` — polls the Kubernetes API and manages DNS records
+- `etc/dnsmasq.conf` — dnsmasq on port 5353 (mapped to 53 by the Service)
+- `etc/bottledns.hosts` — the dynamic hosts file the script rewrites
+- `Dockerfile` — Alpine + bash, curl, jq, dnsmasq
+- `example_deployment.yaml` — full deployment with RBAC
 
-### Main Script (`bottledns.sh`)
-- Runs in continuous loop with 120-second intervals
-- Fetches ingresses via Kubernetes API using service account token
-- Supports both traditional Ingress resources and Gateway API routes
-- Extracts LoadBalancer IPs and hostnames using jq
-- Updates `/etc/bottledns.hosts` and reloads dnsmasq on changes
-- Uses MD5 hash comparison to detect configuration changes
+The script loops on `BOTTLEDNS_NAP_TIME` (default 120s), fetches Ingresses with its
+service-account token, extracts LoadBalancer IPs and hostnames with `jq`, and
+reloads dnsmasq only when an MD5 of the rendered hosts file changes. It handles
+both `networking.k8s.io/v1` Ingress and `gateway.networking.k8s.io/v1` Gateway.
 
-### DNS Configuration
-- dnsmasq runs on port 5353 (mapped to 53 in service)
-- Uses system's default DNS resolution (no upstream resolver configured)
-- Custom hosts loaded from `/etc/bottledns.hosts`
-- Configuration disables system hosts file and polling
+## Commands
 
-## Development Commands
-
-### Build Container
 ```bash
 docker build -t bottledns .
-```
-
-### Test Script Locally
-```bash
-# Requires kubernetes context and proper RBAC
-./bottledns.sh
-```
-
-### Deploy to Kubernetes
-```bash
+./bottledns.sh                              # needs a kube context + RBAC
 kubectl apply -f example_deployment.yaml
+dig @<service-ip> -p 53 <hostname>
+dnsmasq -C etc/dnsmasq.conf --no-daemon     # test locally
 ```
 
-### Test DNS Resolution
-```bash
-# Test against running container
-dig @<bottledns-service-ip> -p 53 <hostname>
+## Gotchas
 
-# Test locally with dnsmasq
-dnsmasq -C etc/dnsmasq.conf --no-daemon
-```
-
-## Configuration
-- `BOTTLEDNS_NAP_TIME` - Sleep interval between checks (default: 120 seconds)
-- Script requires service account with `list` permissions on `ingresses` and `gateways`
-- Supports both networking.k8s.io/v1 Ingress and gateway.networking.k8s.io/v1 Gateway resources
-
-### Required RBAC for Gateway API
-```yaml
-# Add to ClusterRole for Gateway API support
-- apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - gateways
-  - httproutes
-  verbs:
-  - list
-```
-
-## Debugging
-- Script logs to stdout when reloading DNS due to changes
-- Check `/etc/bottledns.hosts` for current DNS records
-- dnsmasq logs available via container logs
-- Script can be interrupted with SIGHUP for graceful shutdown
-- Uses MD5 hash comparison to avoid unnecessary dnsmasq restarts
+- Bash standards: `#!/usr/bin/env bash`, `set -e`, `[[` not `[`, `$()` not
+  backticks, `local` in functions, no emojis, 2-space indent. Use `jq` for JSON,
+  never python.
+- The service account needs `list` on `ingresses`; Gateway API support
+  additionally needs `list` on `gateways` and `httproutes` in the ClusterRole.
+- dnsmasq is deliberately configured with no upstream resolver and the system
+  hosts file disabled.
+- The MD5 comparison exists to avoid restarting dnsmasq on every poll — keep it.
+- The script traps SIGHUP for graceful shutdown; it logs to stdout only when it
+  actually reloads.
