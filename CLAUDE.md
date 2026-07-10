@@ -8,12 +8,14 @@ A single bash script in an Alpine container.
 - **Never push to `main`/`master`.** Feature branch + PR, always. Open the PR,
   report the URL, stop — **only the human merges.**
 - **Conventional Commits** (`feat:`, `fix:`, `chore:`, …). Never hand-bump a version.
+- **`pre-commit` is the gate.** Run `pre-commit run --files <changed>` before
+  declaring a change done, and report the result.
 - Plan every non-trivial task. If the plan fails, restart planning.
 
 ## Workflow
 
-Default branch is `main`. There is no pre-commit config and no mise here; the only
-CI is `docker-publish.yml`. The workspace bash standards still apply.
+Default branch is `main`. There is no mise here; `pre-commit` runs shellcheck,
+shfmt, gitleaks, and file hygiene. The only workflow is `docker-publish.yml`.
 
 ## Architecture
 
@@ -36,6 +38,7 @@ docker build -t bottledns .
 kubectl apply -f example_deployment.yaml
 dig @<service-ip> -p 53 <hostname>
 dnsmasq -C etc/dnsmasq.conf --no-daemon     # test locally
+pre-commit run --files <changed files>
 ```
 
 ## Gotchas
