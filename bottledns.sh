@@ -29,8 +29,8 @@ function get_all_ingress {
 }
 
 function get_all_gateways {
-  curl_k8s "apis/gateway.networking.k8s.io/v1/gateways" | \
-  jq -r '.items // [] | .[] | "\(.metadata.namespace):\(.metadata.name)"'
+  curl_k8s "apis/gateway.networking.k8s.io/v1/gateways" |
+    jq -r '.items // [] | .[] | "\(.metadata.namespace):\(.metadata.name)"'
 }
 
 function get_gateway_ip {
@@ -45,8 +45,8 @@ function get_gateway_ip {
 
 function get_gateway_hostnames {
   local gateway=$1
-  curl_k8s "apis/gateway.networking.k8s.io/v1/httproutes" \
-  | jq -r --arg gw "$gateway" '
+  curl_k8s "apis/gateway.networking.k8s.io/v1/httproutes" |
+    jq -r --arg gw "$gateway" '
     .items // []
     | .[]
     | select(.spec.parentRefs[]?.name == $gw)
@@ -59,18 +59,18 @@ function get_route_records {
   gateway_output="$(get_all_gateways)"
 
   # Return early if no gateways found
-  [[ -z "$gateway_output" ]] && return 0
+  [[ -z $gateway_output ]] && return 0
 
-  mapfile -t gateway_lines <<< "$gateway_output"
+  mapfile -t gateway_lines <<<"$gateway_output"
 
   for gateway_line in "${gateway_lines[@]}"; do
-    [[ -z "$gateway_line" ]] && continue
+    [[ -z $gateway_line ]] && continue
 
-    mapfile -t -d ':' gateway_data <<< "${gateway_line}"
+    mapfile -t -d ':' gateway_data <<<"${gateway_line}"
     local namespace="${gateway_data[0]%$'\n'}"
     local name="${gateway_data[1]%$'\n'}"
     ip="$(get_gateway_ip "$name" "$namespace")"
-    mapfile -t hostnames <<< "$(get_gateway_hostnames "$name")"
+    mapfile -t hostnames <<<"$(get_gateway_hostnames "$name")"
     for hostname in "${hostnames[@]}"; do
       local host="${hostname%$'\n'}"
 
@@ -84,7 +84,7 @@ function get_ingress_records {
   jq -r \
     '.items[] |
     "\(.status.loadBalancer.ingress // [] | map(.ip)[]) \(.spec.rules // [] | map(.host)[])"' \
-  <<< "$(get_all_ingress)"
+    <<<"$(get_all_ingress)"
 }
 
 function get_records {
@@ -93,18 +93,19 @@ function get_records {
 }
 
 function write_hosts_file {
-  local temp_hosts=$(mktemp)
+  local temp_hosts
+  temp_hosts=$(mktemp)
 
-  if [[ -n "${BOTTLEDNS_OVERRIDE_HOSTS}" ]]; then
-    if [[ -f "${BOTTLEDNS_OVERRIDE_HOSTS}" ]]; then
-      cat "${BOTTLEDNS_OVERRIDE_HOSTS}" > "$temp_hosts"
+  if [[ -n ${BOTTLEDNS_OVERRIDE_HOSTS} ]]; then
+    if [[ -f ${BOTTLEDNS_OVERRIDE_HOSTS} ]]; then
+      cat "${BOTTLEDNS_OVERRIDE_HOSTS}" >"$temp_hosts"
     else
       printf '%s\n' "Warning: Override hosts file ${BOTTLEDNS_OVERRIDE_HOSTS} not found, continuing without it"
     fi
   fi
 
-  get_records | sort >> "$temp_hosts"
-  cat "$temp_hosts" > "$BOTTLEDNS_HOSTS"
+  get_records | sort >>"$temp_hosts"
+  cat "$temp_hosts" >"$BOTTLEDNS_HOSTS"
 }
 
 verify_rbac_permissions
@@ -116,7 +117,7 @@ while true; do
   current_hash=$(md5sum "$BOTTLEDNS_HOSTS")
   write_hosts_file
 
-  if ! md5sum -c <<< "$current_hash" &>/dev/null; then
+  if ! md5sum -c <<<"$current_hash" &>/dev/null; then
     printf '%s\n' 'Restarting dnsmasq due to change in bottledns hosts'
     pkill dnsmasq
     # Wait a bit to avoid race condition

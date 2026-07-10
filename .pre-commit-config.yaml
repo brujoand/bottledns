@@ -1,0 +1,41 @@
+# Lint + secret detection. Matches the conventions used across the brujoand
+# workspace: shellcheck + shfmt for bash, gitleaks everywhere.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-yaml
+        # example_deployment.yaml bundles Deployment + Service + RBAC.
+        args: ['--allow-multiple-documents']
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks
+
+  # shellcheck-py, not koalaman/shellcheck-precommit: the latter runs shellcheck
+  # in Docker, which is unavailable in the agent environment.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.10.0-1
+    hooks:
+      - id: shfmt
+        args: ['-w', '-s', '-i', '2']
+
+  - repo: local
+    hooks:
+      - id: bash-syntax
+        name: Check bash syntax (bash -n)
+        entry: bash -n
+        language: system
+        files: \.(sh|bash)$
