@@ -12,7 +12,43 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # semantic-release tags vX.Y.Z from the Conventional Commits since the last
+  # tag. A tag pushed with GITHUB_TOKEN starts no workflow, so the build job
+  # below publishes the version image itself.
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release@26
+
+      - name: Read the new tag
+        id: tag
+        run: echo "tag=$(git tag --points-at HEAD --list 'v*' | head -n1)" >>"$GITHUB_OUTPUT"
+
   build:
+    needs: release
+    if: ${{ !cancelled() && needs.release.result != 'failure' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -47,6 +83,11 @@ jobs:
         uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ needs.release.outputs.tag }},enable=${{ needs.release.outputs.tag != '' }}
 
       # Build and push Docker image with Buildx (don't push on PR)
       - name: Build and push Docker image
