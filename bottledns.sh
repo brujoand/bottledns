@@ -8,14 +8,26 @@ BOTTLEDNS_HOSTS=${BOTTLEDNS_HOSTS:-"${HOME}/bottledns.hosts"}
 DNSMASQ_CONF=${DNSMASQ_CONF:-"${HOME}/dnsmasq.conf"}
 BOTTLEDNS_NAP_TIME=${BOTTLEDNS_NAP_TIME:-120}
 
+# Prints the response body. Fails on a connection error or any status other
+# than 200. A 404 (API group not installed) is an empty list.
 function curl_k8s {
   local path=$1
-  curl -s --header "Authorization: Bearer ${KUBE_TOKEN}" --insecure "${KUBE_ENDPOINT}/${path}"
+  local response status
+  response=$(curl -s -w '\n%{http_code}' --header "Authorization: Bearer ${KUBE_TOKEN}" --insecure "${KUBE_ENDPOINT}/${path}") || return 1
+  status=${response##*$'\n'}
+  case $status in
+  200) printf '%s\n' "${response%$'\n'*}" ;;
+  404) printf '%s\n' '{"items":[]}' ;;
+  *)
+    printf '%s\n' "${response%$'\n'*}"
+    return 1
+    ;;
+  esac
 }
 
 function verify_rbac_permissions {
   local ingress_response
-  ingress_response=$(curl_k8s "apis/networking.k8s.io/v1/ingresses")
+  ingress_response=$(curl_k8s "apis/networking.k8s.io/v1/ingresses") || true
 
   if echo "$ingress_response" | jq -e '.status == "Failure"' &>/dev/null; then
     echo "ERROR: $(echo "$ingress_response" | jq -r '.message')"
@@ -24,76 +36,36 @@ function verify_rbac_permissions {
   fi
 }
 
-function get_all_ingress {
-  curl_k8s "apis/networking.k8s.io/v1/ingresses"
-}
+# Fails if any request fails, so an API outage never yields a partial record set.
+function get_records {
+  local ingresses gateways routes
+  ingresses=$(curl_k8s "apis/networking.k8s.io/v1/ingresses") || return 1
+  gateways=$(curl_k8s "apis/gateway.networking.k8s.io/v1/gateways") || return 1
+  routes=$(curl_k8s "apis/gateway.networking.k8s.io/v1/httproutes") || return 1
 
-function get_all_gateways {
-  curl_k8s "apis/gateway.networking.k8s.io/v1/gateways" |
-    jq -r '.items // [] | .[] | "\(.metadata.namespace):\(.metadata.name)"'
-}
-
-function get_gateway_ip {
-  local gateway_name=${1}
-  local namespace=${2}
-  if [[ -z $gateway_name || -z $namespace ]]; then
-    echo "Missing gateway_name or namespace"
-    return 1
-  fi
-  curl_k8s "apis/gateway.networking.k8s.io/v1/namespaces/${namespace}/gateways/${gateway_name}" | jq -r '.status.addresses[]?.value // empty'
-}
-
-function get_gateway_hostnames {
-  local gateway=$1
-  curl_k8s "apis/gateway.networking.k8s.io/v1/httproutes" |
-    jq -r --arg gw "$gateway" '
-    .items // []
-    | .[]
-    | select(.spec.parentRefs[]?.name == $gw)
+  printf '%s\n%s\n' "$gateways" "$routes" | jq -rs '
+    .[1].items as $routes
+    | .[0].items[]
+    | .metadata.name as $gw
+    | .status.addresses[]?.value as $ip
+    | $routes[]
+    | select(any(.spec.parentRefs[]?; .name == $gw))
     | .spec.hostnames[]?
-  '
-}
+    | "\($ip) \(.)"
+  ' || return 1
 
-function get_route_records {
-  local gateway_output
-  gateway_output="$(get_all_gateways)"
-
-  # Return early if no gateways found
-  [[ -z $gateway_output ]] && return 0
-
-  mapfile -t gateway_lines <<<"$gateway_output"
-
-  for gateway_line in "${gateway_lines[@]}"; do
-    [[ -z $gateway_line ]] && continue
-
-    mapfile -t -d ':' gateway_data <<<"${gateway_line}"
-    local namespace="${gateway_data[0]%$'\n'}"
-    local name="${gateway_data[1]%$'\n'}"
-    ip="$(get_gateway_ip "$name" "$namespace")"
-    mapfile -t hostnames <<<"$(get_gateway_hostnames "$name")"
-    for hostname in "${hostnames[@]}"; do
-      local host="${hostname%$'\n'}"
-
-      [[ -z $host ]] && continue
-      printf '%s %s\n' "$ip" "${host}"
-    done
-  done
-}
-
-function get_ingress_records {
   jq -r \
     '.items[] |
     "\(.status.loadBalancer.ingress // [] | map(.ip)[]) \(.spec.rules // [] | map(.host)[])"' \
-    <<<"$(get_all_ingress)"
-}
-
-function get_records {
-  get_route_records
-  get_ingress_records
+    <<<"$ingresses" || return 1
 }
 
 function write_hosts_file {
-  local temp_hosts
+  local temp_hosts records
+  if ! records=$(get_records); then
+    printf '%s\n' 'Kubernetes API request failed, keeping the current hosts file'
+    return 1
+  fi
   temp_hosts=$(mktemp)
 
   if [[ -n ${BOTTLEDNS_OVERRIDE_HOSTS} ]]; then
@@ -104,7 +76,7 @@ function write_hosts_file {
     fi
   fi
 
-  get_records | sort >>"$temp_hosts"
+  printf '%s' "$records" | sort >>"$temp_hosts"
   cat "$temp_hosts" >"$BOTTLEDNS_HOSTS"
 }
 
@@ -115,9 +87,8 @@ dnsmasq -C "$DNSMASQ_CONF"
 
 while true; do
   current_hash=$(md5sum "$BOTTLEDNS_HOSTS")
-  write_hosts_file
 
-  if ! md5sum -c <<<"$current_hash" &>/dev/null; then
+  if write_hosts_file && ! md5sum -c <<<"$current_hash" &>/dev/null; then
     printf '%s\n' 'Restarting dnsmasq due to change in bottledns hosts'
     pkill dnsmasq
     # Wait a bit to avoid race condition
