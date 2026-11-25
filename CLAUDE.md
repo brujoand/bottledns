@@ -15,7 +15,10 @@ A single bash script in an Alpine container.
 ## Workflow
 
 Default branch is `main`. There is no mise here; `pre-commit` runs shellcheck,
-shfmt, gitleaks, and file hygiene. The only workflow is `docker-publish.yml`.
+shfmt, gitleaks, and file hygiene. The only workflow is `docker-publish.yml`: on
+a push to `main`, semantic-release tags `vX.Y.Z` from the commit types since
+the last tag (`fix:` patch, `feat:` minor), and the same run publishes that tag's
+image.
 
 ## Architecture
 
